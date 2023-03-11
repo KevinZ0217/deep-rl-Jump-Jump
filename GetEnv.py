@@ -114,7 +114,7 @@ class GetEnv:
             cv2.waitKey(0)   
             cv2.destroyAllWindows()
 
-        im = np.expand_dims(cv2.resize(im, (120, 200)) / 255.0,-1)
+        im = np.expand_dims(cv2.resize(im, (120, 200)) / 255.0, -1)
         im = np.float32(np.expand_dims(im, 0))
         return im
 
