@@ -105,7 +105,7 @@ if __name__ == '__main__':
             print("time:", time_t)
             # 选择行为
             action = agent.actor(state)
-
+            print('action check:', action)
             # 在环境中施加行为推动游戏进行
             next_state, reward, done = get_env.touch_in_step(action)
             # get_env.touch_in_step(action)

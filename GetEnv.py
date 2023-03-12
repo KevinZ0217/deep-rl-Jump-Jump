@@ -49,7 +49,6 @@ class GetEnv:
         result = cv2.matchTemplate(screen_shot_im,
                                    find_shot_im,
                                    cv2.TM_CCOEFF_NORMED)
-        print('result', result.max())
         if result.max() > 0.8:
             y,x = np.unravel_index(result.argmax(),result.shape)
             y += find_shot_im.shape[0] // 2
@@ -64,11 +63,9 @@ class GetEnv:
         """
         hWnd = win32gui.FindWindow(None, promgram_name) #窗口的类名可以用Visual Studio的SPY++工具获取
         # 设置窗口在最前面
-        print('HWND',hWnd)
         self.set_foreground(hWnd)
         time.sleep(1)
         left, top, right, bot = win32gui.GetWindowRect(hWnd)
-        #print("rect",right,left, bot,top)
         self.left = left
         self.top = top
         self.right = right
@@ -83,7 +80,6 @@ class GetEnv:
 
         # 识别“点击开始游戏”位置
         self.start_x, self.stat_y = self._find_start_btn(jpg_file, self.start_btn_img)
-        print("position",self.start_x, self.stat_y)
         pyautogui.click(x=self.start_x, y=self.stat_y, duration=0.25)
 
         time.sleep(1)
@@ -131,7 +127,6 @@ class GetEnv:
 
         # 截屏
         self.screen_pic(self.promgram_name, self.jpg_file, self.jpg_file2)
-        print('here')
         # 转灰度图
         image_gray = self.get_gray_image(self.jpg_file2, is_show)
 
@@ -159,7 +154,7 @@ class GetEnv:
         
         # 计算按压时间
         dist = self.dist(action.numpy()[0, 0])
-        print("dist:", dist)
+        #print("dist:", dist)
         pyautogui.moveTo(x=self.tiao_x, y=self.tiao_y, duration=0.25)
         pyautogui.dragTo(x=self.tiao_x, y=self.tiao_y, duration=dist)
         
