@@ -153,7 +153,7 @@ class GetEnv:
         time.sleep(0.5)
         
         # 计算按压时间
-        dist = self.dist(action.numpy()[0, 0])
+        dist = self.dist(action) #dist = self.dist(action.numpy()[0, 0])
         #print("dist:", dist)
         pyautogui.moveTo(x=self.tiao_x, y=self.tiao_y, duration=0.25)
         pyautogui.dragTo(x=self.tiao_x, y=self.tiao_y, duration=dist)
