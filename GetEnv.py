@@ -16,7 +16,8 @@ class GetEnv:
         self.promgram_name = "跳一跳"
         self.start_btn_img = cv2.imread('./pic/img.png', cv2.IMREAD_GRAYSCALE)
         self.restart_btn_img = cv2.imread('./pic/img_1.png', cv2.IMREAD_GRAYSCALE)
-
+        self.agent = cv2.imread('./img.png', cv2.IMREAD_GRAYSCALE)
+        self.agent_platform = cv2.imread('./img_1.png', cv2.IMREAD_GRAYSCALE)
         # 跳一跳位置
         self.tiao_x = 0
         self.tiao_y = 0 
@@ -29,7 +30,7 @@ class GetEnv:
         # 开始游戏位置
         self.start_x = 0
         self.stat_y = 0
-
+        self.reward_track = 0
 
     def set_foreground(sef, hwnd):
         """
@@ -56,6 +57,16 @@ class GetEnv:
             return x, y
         else:
             return -1, -1
+
+    def find_reward(self, screen_shot, num_tbd):
+
+        screen_shot = cv2.imread(screen_shot, cv2.IMREAD_GRAYSCALE)
+        number_template = cv2.imread(f'./pic/template_{num_tbd}.png', cv2.IMREAD_GRAYSCALE)
+        result = cv2.matchTemplate(screen_shot, number_template, cv2.TM_CCOEFF_NORMED)
+        number = -1
+        if result.max() > 0.9:
+            number = num_tbd
+        return number
 
     def screen_pic(self, promgram_name, jpg_file, jpg_file2):
         """
@@ -153,12 +164,13 @@ class GetEnv:
         time.sleep(0.5)
         
         # 计算按压时间
-        dist = self.dist(action) #dist = self.dist(action.numpy()[0, 0])
+        dist = self.dist(action.numpy()[0, 0])#dist = self.dist(action)
+
         #print("dist:", dist)
         pyautogui.moveTo(x=self.tiao_x, y=self.tiao_y, duration=0.25)
         pyautogui.dragTo(x=self.tiao_x, y=self.tiao_y, duration=dist)
         
-        time.sleep(3)
+        time.sleep(dist+3.5)
 
         # 截屏
         ## 重新截屏
@@ -177,10 +189,77 @@ class GetEnv:
         time.sleep(1)
         restart_x, restart_y = self._find_start_btn(self.jpg_file, self.restart_btn_img)
         print('cursor location:', restart_x)
+
         # The game has not ended yet
         if restart_x == -1:
+            reward = 0
+            number = -1
+            num_list = []
+            for i in range(10):
+                number = self.find_reward(self.jpg_file2, i)
+                print(f"number:{number}")
+                if number != -1:
+                    num_list.append(number)
+                    number = -1
+            print(f'length numlist: {len(num_list)}')
+            if len(num_list) == 2:
+                curr_reward_1, curr_reward_2 = num_list[0]*10 + num_list[1], num_list[1]*10 + num_list[0]
+                if curr_reward_1 > self.reward_track:
+                    reward = curr_reward_1
+                    self.reward_track = reward
+                else:
+                    reward = curr_reward_2
+                    self.reward_track = reward
+            else:
+                curr_reward_1 = num_list[0]
+                reward = curr_reward_1
+                self.reward_track = curr_reward_1
+
+
             state = self.get_gray_image(self.jpg_file2)
-            reward = 1
+
+            # Convert the image to grayscale
+            #image = cv2.imread(self.jpg_file2)
+            #template_ = cv2.imread(self.agent_platform)
+            # agent_x, agent_y = self._find_start_btn(self.jpg_file2, self.agent)
+            # contour detection
+            # img_blur = cv2.GaussianBlur(image, (5, 5), 0)  # 高斯模糊
+            # canny_img = cv2.Canny(img_blur, 1, 10)  # 边缘检测
+            #screen_shot_im = cv2.imread(self.jpg_file2, cv2.IMREAD_GRAYSCALE)
+            #ind_shot_im = cv2.imread(template_, cv2.IMREAD_GRAYSCALE)
+            #result = cv2.matchTemplate(screen_shot_im,
+            #                           self.agent_platform,
+            #                           cv2.TM_CCOEFF_NORMED)
+           # dist = result.max()
+            #print(dist)
+            #reward = 1
+            # #gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+            # # Apply a threshold to create a binary image
+            # #_, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+            # # Find contours in the binary image
+            # contours, _ = cv2.findContours(canny_img, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            # center_locations = []
+            # # Iterate through the contours and calculate the center of each contour
+            # for contour in contours:
+            #     # Calculate the moments of the contour
+            #     moments = cv2.moments(contour)
+            #
+            #     # Calculate the center of the contour
+            #     if moments['m00'] != 0:
+            #         center_x = int(moments['m10'] / moments['m00'])
+            #         center_y = int(moments['m01'] / moments['m00'])
+            #     else:
+            #         center_x, center_y = 0, 0
+            #     center_locations.append((center_x, center_y))
+            #     # Draw a circle at the center of the contour (optional)
+            #     cv2.circle(image, (center_x, center_y), 5, (0, 255, 0), -1)
+            # # Display the original image with the center of the contour marked (optional)
+            # cv2.imshow('Image', image)
+            # cv2.waitKey(0)
+            # cv2.destroyAllWindows()
+            # print(center_locations)
+
+
             done = False
             return state, reward, done
         else:

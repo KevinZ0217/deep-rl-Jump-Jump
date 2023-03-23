@@ -2,6 +2,9 @@ import tensorflow as tf
 import numpy as np
 from numpy import random
 from GetEnv import GetEnv
+import tensorflow_probability as tfp
+
+
 class ActorNetwork(tf.keras.Model):
     def __init__(self, action_dim):
         super(ActorNetwork, self).__init__()
@@ -21,9 +24,10 @@ class ActorNetwork(tf.keras.Model):
         self.dense_1 = tf.keras.layers.Dense(200, activation='relu')
         self.dense_2 = tf.keras.layers.Dense(200, activation='relu')
 
-        self.outputs = tf.keras.layers.Dense(action_dim, activation='softmax')
-
-    def call(self, inputs, training=False):
+        # self.outputs = tf.keras.layers.Dense(action_dim, activation='softmax')
+        self.mean = tf.keras.layers.Dense(action_dim, activation='linear') #was tanh
+        self.log_std = tf.keras.layers.Dense(action_dim, activation='linear')# was softplus
+    def call(self, inputs, training=True):
         inputs = tf.reshape(inputs, (-1, 200, 120, 1))
 
         x = inputs[:, :, :, :]
@@ -43,9 +47,12 @@ class ActorNetwork(tf.keras.Model):
         x = self.dense_1(x)
         x = self.dense_2(x)
 
-        outputs = self.outputs(x)
+        mean = self.mean(x)
+        log_std = self.log_std(x)
+        std = tf.nn.softplus(log_std)
+        #outputs = self.outputs(x)
 
-        return outputs
+        return mean, std
 
 
 class CriticNetwork(tf.keras.Model):
@@ -69,7 +76,7 @@ class CriticNetwork(tf.keras.Model):
 
         self.outputs = tf.keras.layers.Dense(1, activation='linear')
 
-    def call(self, inputs, training=False):
+    def call(self, inputs, training=True):
         x = inputs[:, :, :, :]
 
         x = self.average_pooling_2d(x)
@@ -100,24 +107,29 @@ class PPOAgent:
         self.actor = ActorNetwork(action_dim)
         self.critic = CriticNetwork()
 
-        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=3e-4)
+        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
         self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
 
         self.gamma = 0.99
         self.lmbda = 0.95
-        self.clip_epsilon = 0.2
+        self.clip_epsilon = 0.4
         self.epochs = 10
-        self.batch_size = 64
+        self.batch_size = 32
         self.memory = []
-
+        self.action_low= -2
+        self.action_high = 0.15
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
+        # state = np.expand_dims(state, axis=0)
     def act(self, state):
-        state = np.expand_dims(state, axis=0)
-        action_probs = self.actor(state)
-        action = np.random.choice(range(action_probs.shape[1]), p=action_probs.numpy().ravel())
-        return action
+        # action_probs = self.actor(state)
+        # action = np.random.choice(range(action_probs.shape[1]), p=action_probs.numpy().ravel())
+        # return action
+        mean, std = self.actor(state)
+        normal_distribution = tfp.distributions.Normal(loc=mean, scale=std)
+        action = normal_distribution.sample()
+        return tf.clip_by_value(action, self.action_low, self.action_high)
 
     def value(self, state):
         state = np.expand_dims(state, axis=0)
@@ -134,6 +146,8 @@ class PPOAgent:
         td_errors = rewards + self.gamma * next_values * (1 - dones) - values
         advantages = np.zeros_like(td_errors)
         running_advantage = 0
+        # calculates the advantages using the Generalized Advantage Estimation (GAE) method,
+        # which is a technique that reduces the variance in advantage estimates
         for t in reversed(range(len(td_errors))):
             running_advantage = td_errors[t] + self.gamma * self.lmbda * running_advantage * (1 - dones[t])
             advantages[t] = running_advantage
@@ -156,14 +170,23 @@ class PPOAgent:
 
                 with tf.GradientTape() as actor_tape, tf.GradientTape() as critic_tape:
                     # Calculate the probabilities for the selected actions
-                    action_probs = self.actor(state_batch)
-                    selected_probs = tf.reduce_sum(action_probs * tf.one_hot(action_batch, action_probs.shape[1]),
-                                                   axis=1)
+                    # action_probs = self.actor(state_batch)
+                    # selected_probs = tf.reduce_sum(action_probs * tf.one_hot(action_batch, action_probs.shape[1]),
+                    #                                axis=1)
+                    #
+                    # # Calculate the new probabilities after updating the actor
+                    # new_action_probs = self.actor(state_batch)
+                    # new_selected_probs = tf.reduce_sum(
+                    #     new_action_probs * tf.one_hot(action_batch, new_action_probs.shape[1]), axis=1)
+                    mean, std = self.actor(state_batch)
+                    normal_distribution = tfp.distributions.Normal(loc=mean, scale=std)
+                    log_probs = normal_distribution.log_prob(action_batch)
+                    selected_probs = tf.exp(log_probs)
 
-                    # Calculate the new probabilities after updating the actor
-                    new_action_probs = self.actor(state_batch)
-                    new_selected_probs = tf.reduce_sum(
-                        new_action_probs * tf.one_hot(action_batch, new_action_probs.shape[1]), axis=1)
+                    new_mean, new_std = self.actor(state_batch)
+                    new_normal_distribution = tfp.distributions.Normal(loc=new_mean, scale=new_std)
+                    new_log_probs = new_normal_distribution.log_prob(action_batch)
+                    new_selected_probs = tf.exp(new_log_probs)
 
                     # Calculate the ratio and clip it
                     ratio = new_selected_probs / selected_probs
@@ -210,7 +233,7 @@ def main():
 
     state_dim = 200 * 120
     action_dim = 1
-    ppo = PPOAgent(state_dim, action_dim)
+    ppo = PPOAgent(env, action_dim) # state_dim
 
     running_reward = 0
     timestep = 0
@@ -223,7 +246,9 @@ def main():
             timestep += 1
 
             action = ppo.act(state)
+            print('action:', action)
             next_state, reward, done = env.touch_in_step(action)
+            print("reward:", reward)
 
             if done:
                 break

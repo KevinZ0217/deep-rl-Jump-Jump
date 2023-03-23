@@ -163,6 +163,7 @@ class Agent:
     def remember(self, state, action, reward, next_state, done):
         self.memory.append((state, action, reward, next_state, done))
 
+
     def add_noise(self, x, mu, theta, sigma):
         return theta * (mu - x) + sigma * np.random.randn(1)[0]
 
