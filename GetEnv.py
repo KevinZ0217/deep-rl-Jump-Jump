@@ -5,6 +5,8 @@ import pyautogui
 import cv2
 import time
 from PIL import Image
+import pytesseract
+pytesseract.pytesseract.tesseract_cmd = r'C:\Program Files\Tesseract-OCR\tesseract.exe'
 
 # 缩放比例
 pingmu_suofang = 1
@@ -13,10 +15,11 @@ class GetEnv:
     def __init__(self):
         self.jpg_file = 'screenshot.png'
         self.jpg_file2 = 'screenshot2.png'
+        self.jpg_file3 = 'screenshot3.png'
         self.promgram_name = "跳一跳"
         self.start_btn_img = cv2.imread('./pic/img.png', cv2.IMREAD_GRAYSCALE)
         self.restart_btn_img = cv2.imread('./pic/img_1.png', cv2.IMREAD_GRAYSCALE)
-        self.agent = cv2.imread('./img.png', cv2.IMREAD_GRAYSCALE)
+        # self.agent = cv2.imread('./img.png', cv2.IMREAD_GRAYSCALE)
         self.agent_platform = cv2.imread('./img_1.png', cv2.IMREAD_GRAYSCALE)
         # 跳一跳位置
         self.tiao_x = 0
@@ -64,9 +67,13 @@ class GetEnv:
         number_template = cv2.imread(f'./pic/template_{num_tbd}.png', cv2.IMREAD_GRAYSCALE)
         result = cv2.matchTemplate(screen_shot, number_template, cv2.TM_CCOEFF_NORMED)
         number = -1
-        if result.max() > 0.9:
-            number = num_tbd
+        if result.max() > 0.95:
+           number = num_tbd
         return number
+
+        # text = pytesseract.image_to_string(screen_shot, config="--psm 6")
+        # print(f"reward_test: {text}")
+        # return int(text)
 
     def screen_pic(self, promgram_name, jpg_file, jpg_file2):
         """
@@ -78,7 +85,7 @@ class GetEnv:
         time.sleep(1)
         left, top, right, bot = win32gui.GetWindowRect(hWnd)
         self.left = left
-        self.top = top
+        self.top = top+60
         self.right = right
         self.bot = bot
         self.tiao_x = (right + left) // 2
@@ -151,8 +158,8 @@ class GetEnv:
         d = action * 400 + 700
         if d < 300:
             d = 300
-        elif d > 1100:
-            d = 1100
+        elif d > 1000:
+            d = 1000
             
         return d / 1000
 
@@ -165,7 +172,7 @@ class GetEnv:
         
         # 计算按压时间
         dist = self.dist(action.numpy()[0, 0])#dist = self.dist(action)
-
+        print(f"pressing time: {dist}")
         #print("dist:", dist)
         pyautogui.moveTo(x=self.tiao_x, y=self.tiao_y, duration=0.25)
         pyautogui.dragTo(x=self.tiao_x, y=self.tiao_y, duration=dist)
@@ -180,9 +187,14 @@ class GetEnv:
 
         ## 剪裁
         rangle = (int(self.left) * pingmu_suofang, int(self.top) * pingmu_suofang, int(self.right) * pingmu_suofang, int(self.bot) * pingmu_suofang)
+        reward_rangle = (int(self.left) * pingmu_suofang, int(self.top) * pingmu_suofang, int(self.right) * pingmu_suofang, int(self.bot/2-20) * pingmu_suofang)
+        reward_img = Image.open(self.jpg_file)
+        reward_jpg = reward_img.convert('RGB')
+        reward_jpg = reward_jpg.crop(reward_rangle)
+        reward_jpg.save(self.jpg_file3)
         img = Image.open(self.jpg_file)
         jpg = img.convert('RGB')
-        jpg = img.crop(rangle)
+        jpg = jpg.crop(rangle) # to be fixed
         jpg.save(self.jpg_file2)
 
         # 查找是否失败
@@ -196,7 +208,7 @@ class GetEnv:
             number = -1
             num_list = []
             for i in range(10):
-                number = self.find_reward(self.jpg_file2, i)
+                number = self.find_reward(self.jpg_file3, i)
                 print(f"number:{number}")
                 if number != -1:
                     num_list.append(number)

@@ -1,8 +1,13 @@
 import tensorflow as tf
 import numpy as np
-from numpy import random
+import random
 from GetEnv import GetEnv
 import tensorflow_probability as tfp
+import os
+import pickle
+file_memory = "./data/ppo_mem.p"
+file_score = "./data/ppo_score.p"
+
 
 
 class ActorNetwork(tf.keras.Model):
@@ -112,13 +117,15 @@ class PPOAgent:
 
         self.gamma = 0.99
         self.lmbda = 0.95
-        self.clip_epsilon = 0.4
+        self.clip_epsilon = 0.6
         self.epochs = 10
         self.batch_size = 32
         self.memory = []
-        self.action_low= -2
-        self.action_high = 0.15
+        #self.action_low= -2
+        #self.action_high = 0.15
     def remember(self, state, action, reward, next_state, done):
+        state = np.reshape(state, (200, 120, 1))
+        next_state = np.reshape(next_state, (200, 120, 1))
         self.memory.append((state, action, reward, next_state, done))
 
         # state = np.expand_dims(state, axis=0)
@@ -129,7 +136,7 @@ class PPOAgent:
         mean, std = self.actor(state)
         normal_distribution = tfp.distributions.Normal(loc=mean, scale=std)
         action = normal_distribution.sample()
-        return tf.clip_by_value(action, self.action_low, self.action_high)
+        return action
 
     def value(self, state):
         state = np.expand_dims(state, axis=0)
@@ -157,16 +164,21 @@ class PPOAgent:
     # Include the previously provided replay function here
 
     def replay(self):
+        if len(self.memory) < self.batch_size:
+            return
         states, actions, rewards, next_states, dones = self.sample_memory()
         advantages, target_values = self.compute_advantages(states, rewards, next_states, dones)
 
         for _ in range(self.epochs):
             for idx in range(0, len(states), self.batch_size):
-                batch_indices = range(idx, min(idx + self.batch_size, len(states)))
+                batch_indices = list(range(idx, min(idx + self.batch_size, len(states))))
+                #batch_indices = range(idx, min(idx + self.batch_size, len(states)))
                 state_batch = states[batch_indices]
                 action_batch = actions[batch_indices]
                 advantage_batch = advantages[batch_indices]
-                target_value_batch = target_values[batch_indices]
+                batch_indices_tensor = tf.convert_to_tensor(batch_indices, dtype=tf.int32)
+                target_value_batch = tf.gather(target_values, batch_indices_tensor)
+                #target_value_batch = target_values[batch_indices]
 
                 with tf.GradientTape() as actor_tape, tf.GradientTape() as critic_tape:
                     # Calculate the probabilities for the selected actions
@@ -194,10 +206,12 @@ class PPOAgent:
 
                     # Calculate the actor loss
                     actor_loss = -tf.reduce_mean(tf.minimum(ratio * advantage_batch, clipped_ratio * advantage_batch))
-
+                    print(f"actor loss: { actor_loss}")
                     # Calculate the critic loss
                     critic_values = self.critic(state_batch)
                     critic_loss = tf.reduce_mean(tf.square(target_value_batch - critic_values))
+                    print(f"critic loss: {critic_loss}")
+
 
                 # Compute gradients and apply them to the actor and critic networks
                 actor_gradients = actor_tape.gradient(actor_loss, self.actor.trainable_variables)
@@ -219,8 +233,8 @@ def main():
 
     # Set the hyperparameters
     n_episodes = 1000
-    n_timesteps = 200
-    update_timestep = 2000
+    n_timesteps = 100
+    update_timestep = 256
     lr = 0.0025
     gamma = 0.99
     K_epochs = 4
@@ -234,13 +248,26 @@ def main():
     state_dim = 200 * 120
     action_dim = 1
     ppo = PPOAgent(env, action_dim) # state_dim
+    if os.path.exists(file_memory):
+        with open(file_memory, "rb") as f:
+            ppo.memory = pickle.load(f)
 
+    checkpoint_path = "./checkpoints/ddpg_checkpoint"
+    ckpt = tf.train.Checkpoint(actor=ppo.actor, critic=ppo.critic)
+    ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
+
+    # 如果检查点存在，则恢复最新的检查点。
+    if ckpt_manager.latest_checkpoint:
+        ckpt.restore(ckpt_manager.latest_checkpoint)
+        print('Latest checkpoint restored!!')
     running_reward = 0
     timestep = 0
 
+    score = []
     for episode in range(1, n_episodes + 1):
         state = env.reset(is_show=False)
-        state = state.reshape(-1)
+        state = state
+        #state = state.reshape(-1)
 
         for t in range(n_timesteps):
             timestep += 1
@@ -251,17 +278,27 @@ def main():
             print("reward:", reward)
 
             if done:
+                score.append(t)
                 break
 
             ppo.remember(state, action, reward, next_state, done)
-            state = next_state.reshape(-1)
+            #state = next_state.reshape(-1)
+            state = next_state
 
             if timestep % update_timestep == 0:
                 ppo.replay()
                 timestep = 0
 
         running_reward += t
-        print('Episode: {}, Timesteps: {}, Running Reward: {}'.format(episode, t, running_reward))
+        print('Episode: {}, Timesteps: {}, Running Reward: {}'.format(episode, timestep, running_reward))
+
+        if episode % 10 == 0 and running_reward != 0:
+            save_data = (score, episode, running_reward)
+            pickle.dump(save_data, open(file_score, 'wb'))
+            pickle.dump(ppo.memory, open(file_memory, 'wb'))
+
+            ckpt_save_path = ckpt_manager.save()
+            #print("Use All time: {}".format(time.time() - all_time))
 
 if __name__ == '__main__':
     main()
