@@ -111,21 +111,28 @@ class PPOAgent:
         self.env = env
         self.actor = ActorNetwork(action_dim)
         self.critic = CriticNetwork()
+        lr_schedule = tf.keras.optimizers.schedules.ExponentialDecay(
+            initial_learning_rate=0.001,
+            decay_steps=10000,
+            decay_rate=0.95,
+            staircase=True)
+        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
+        self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=lr_schedule)
 
-        self.actor_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-4)
-        self.critic_optimizer = tf.keras.optimizers.Adam(learning_rate=1e-3)
-
-        self.gamma = 0.99
+        self.gamma = 0.5
         self.lmbda = 0.95
-        self.clip_epsilon = 0.6
-        self.epochs = 10
+        self.clip_epsilon = 0.3
+        self.epochs = 5
         self.batch_size = 32
         self.memory = []
         #self.action_low= -2
         #self.action_high = 0.15
     def remember(self, state, action, reward, next_state, done):
         state = np.reshape(state, (200, 120, 1))
-        next_state = np.reshape(next_state, (200, 120, 1))
+        if done:
+            next_state = np.zeros_like(state)
+        else:
+            next_state = np.reshape(next_state, (200, 120, 1))
         self.memory.append((state, action, reward, next_state, done))
 
         # state = np.expand_dims(state, axis=0)
@@ -158,6 +165,9 @@ class PPOAgent:
         for t in reversed(range(len(td_errors))):
             running_advantage = td_errors[t] + self.gamma * self.lmbda * running_advantage * (1 - dones[t])
             advantages[t] = running_advantage
+
+        # Normalize the advantages
+        advantages = (advantages - advantages.mean()) / (advantages.std() + 1e-8)
         target_values = advantages + values
         return advantages, target_values
 
@@ -245,14 +255,14 @@ def main():
         tf.random.set_seed(random_seed)
         np.random.seed(random_seed)
 
-    state_dim = 200 * 120
+    state_dim = (200, 120, 1)
     action_dim = 1
     ppo = PPOAgent(env, action_dim) # state_dim
     if os.path.exists(file_memory):
         with open(file_memory, "rb") as f:
             ppo.memory = pickle.load(f)
 
-    checkpoint_path = "./checkpoints/ddpg_checkpoint"
+    checkpoint_path = "./checkpoints/ppo_checkpoint"
     ckpt = tf.train.Checkpoint(actor=ppo.actor, critic=ppo.critic)
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
@@ -277,17 +287,20 @@ def main():
             next_state, reward, done = env.touch_in_step(action)
             print("reward:", reward)
 
-            if done:
-                score.append(t)
-                break
+
 
             ppo.remember(state, action, reward, next_state, done)
             #state = next_state.reshape(-1)
             state = next_state
-
+            print(f"update_timestep:{update_timestep}")
+            print(f"timestep:{timestep}")
             if timestep % update_timestep == 0:
+                print('update')
                 ppo.replay()
                 timestep = 0
+            if done:
+                score.append(t)
+                break
 
         running_reward += t
         print('Episode: {}, Timesteps: {}, Running Reward: {}'.format(episode, timestep, running_reward))

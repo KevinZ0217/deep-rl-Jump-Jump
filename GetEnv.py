@@ -198,7 +198,7 @@ class GetEnv:
         jpg.save(self.jpg_file2)
 
         # 查找是否失败
-        time.sleep(1)
+        time.sleep(2)
         restart_x, restart_y = self._find_start_btn(self.jpg_file, self.restart_btn_img)
         print('cursor location:', restart_x)
 
@@ -206,26 +206,26 @@ class GetEnv:
         if restart_x == -1:
             reward = 0
             number = -1
-            num_list = []
-            for i in range(10):
-                number = self.find_reward(self.jpg_file3, i)
-                print(f"number:{number}")
-                if number != -1:
-                    num_list.append(number)
-                    number = -1
-            print(f'length numlist: {len(num_list)}')
-            if len(num_list) == 2:
-                curr_reward_1, curr_reward_2 = num_list[0]*10 + num_list[1], num_list[1]*10 + num_list[0]
-                if curr_reward_1 > self.reward_track:
-                    reward = curr_reward_1
-                    self.reward_track = reward
-                else:
-                    reward = curr_reward_2
-                    self.reward_track = reward
-            else:
-                curr_reward_1 = num_list[0]
-                reward = curr_reward_1
-                self.reward_track = curr_reward_1
+            # num_list = []
+            # for i in range(10):
+            #     number = self.find_reward(self.jpg_file3, i)
+            #     print(f"number:{number}")
+            #     if number != -1:
+            #         num_list.append(number)
+            #         number = -1
+            # print(f'length numlist: {len(num_list)}')
+            # if len(num_list) == 2:
+            #     curr_reward_1, curr_reward_2 = num_list[0]*10 + num_list[1], num_list[1]*10 + num_list[0]
+            #     if curr_reward_1 > self.reward_track:
+            #         reward = curr_reward_1
+            #         self.reward_track = reward
+            #     else:
+            #         reward = curr_reward_2
+            #         self.reward_track = reward
+            # else:
+            #     curr_reward_1 = num_list[0]
+            #     reward = curr_reward_1
+            #     self.reward_track = curr_reward_1
 
 
             state = self.get_gray_image(self.jpg_file2)
@@ -244,7 +244,7 @@ class GetEnv:
             #                           cv2.TM_CCOEFF_NORMED)
            # dist = result.max()
             #print(dist)
-            #reward = 1
+            reward = 1
             # #gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
             # # Apply a threshold to create a binary image
             # #_, binary = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
@@ -270,7 +270,6 @@ class GetEnv:
             # cv2.waitKey(0)
             # cv2.destroyAllWindows()
             # print(center_locations)
-
 
             done = False
             return state, reward, done

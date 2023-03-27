@@ -322,7 +322,7 @@ if __name__ == '__main__':
         print('Latest checkpoint restored!!')
 
     scores = []
-    episodes = 10
+    episodes = 5
     steps = 0
     for e in range(episodes):
         state = get_env.reset(is_show=False)
