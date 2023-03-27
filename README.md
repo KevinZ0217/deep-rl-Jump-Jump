@@ -1,4 +1,5 @@
 # Deep-Jump
+### Part of the code from https://github.com/wptoux/deep-tiaotiao
 ## 1. Introduction
 - In recent years, reinforcement learning algorithms have gained significant attention due to their ability to learn complex tasks through trial and error. One area of particular interest is game playing, where these algorithms can learn to play games at a superhuman level. In this project, we aim to develop an intelligent agent capable of playing a specific game using Proximal Policy Optimization (PPO), a state-of-the-art reinforcement learning algorithm, combined with Convolutional Neural Networks (CNNs) for visual feature extraction.
 
