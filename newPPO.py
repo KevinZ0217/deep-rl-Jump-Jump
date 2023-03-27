@@ -29,9 +29,8 @@ class ActorNetwork(tf.keras.Model):
         self.dense_1 = tf.keras.layers.Dense(200, activation='relu')
         self.dense_2 = tf.keras.layers.Dense(200, activation='relu')
 
-        # self.outputs = tf.keras.layers.Dense(action_dim, activation='softmax')
-        self.mean = tf.keras.layers.Dense(action_dim, activation='linear') #was tanh
-        self.log_std = tf.keras.layers.Dense(action_dim, activation='linear')# was softplus
+        self.mean = tf.keras.layers.Dense(action_dim, activation='linear')
+        self.log_std = tf.keras.layers.Dense(action_dim, activation='linear')
     def call(self, inputs, training=True):
         inputs = tf.reshape(inputs, (-1, 200, 120, 1))
 
@@ -55,7 +54,6 @@ class ActorNetwork(tf.keras.Model):
         mean = self.mean(x)
         log_std = self.log_std(x)
         std = tf.nn.softplus(log_std)
-        #outputs = self.outputs(x)
 
         return mean, std
 
@@ -125,8 +123,8 @@ class PPOAgent:
         self.epochs = 5
         self.batch_size = 32
         self.memory = []
-        #self.action_low= -2
-        #self.action_high = 0.15
+
+
     def remember(self, state, action, reward, next_state, done):
         state = np.reshape(state, (200, 120, 1))
         if done:
@@ -135,11 +133,8 @@ class PPOAgent:
             next_state = np.reshape(next_state, (200, 120, 1))
         self.memory.append((state, action, reward, next_state, done))
 
-        # state = np.expand_dims(state, axis=0)
     def act(self, state):
-        # action_probs = self.actor(state)
-        # action = np.random.choice(range(action_probs.shape[1]), p=action_probs.numpy().ravel())
-        # return action
+
         mean, std = self.actor(state)
         normal_distribution = tfp.distributions.Normal(loc=mean, scale=std)
         action = normal_distribution.sample()
@@ -171,7 +166,6 @@ class PPOAgent:
         target_values = advantages + values
         return advantages, target_values
 
-    # Include the previously provided replay function here
 
     def replay(self):
         if len(self.memory) < self.batch_size:
@@ -182,24 +176,13 @@ class PPOAgent:
         for _ in range(self.epochs):
             for idx in range(0, len(states), self.batch_size):
                 batch_indices = list(range(idx, min(idx + self.batch_size, len(states))))
-                #batch_indices = range(idx, min(idx + self.batch_size, len(states)))
                 state_batch = states[batch_indices]
                 action_batch = actions[batch_indices]
                 advantage_batch = advantages[batch_indices]
                 batch_indices_tensor = tf.convert_to_tensor(batch_indices, dtype=tf.int32)
                 target_value_batch = tf.gather(target_values, batch_indices_tensor)
-                #target_value_batch = target_values[batch_indices]
 
                 with tf.GradientTape() as actor_tape, tf.GradientTape() as critic_tape:
-                    # Calculate the probabilities for the selected actions
-                    # action_probs = self.actor(state_batch)
-                    # selected_probs = tf.reduce_sum(action_probs * tf.one_hot(action_batch, action_probs.shape[1]),
-                    #                                axis=1)
-                    #
-                    # # Calculate the new probabilities after updating the actor
-                    # new_action_probs = self.actor(state_batch)
-                    # new_selected_probs = tf.reduce_sum(
-                    #     new_action_probs * tf.one_hot(action_batch, new_action_probs.shape[1]), axis=1)
                     mean, std = self.actor(state_batch)
                     normal_distribution = tfp.distributions.Normal(loc=mean, scale=std)
                     log_probs = normal_distribution.log_prob(action_batch)
@@ -233,11 +216,6 @@ class PPOAgent:
         self.memory = []
 
 
-# import numpy as np
-# import tensorflow as tf
-# from ppo import PPOAgent
-
-
 def main():
     env = GetEnv()
 
@@ -245,10 +223,6 @@ def main():
     n_episodes = 1000
     n_timesteps = 100
     update_timestep = 256
-    lr = 0.0025
-    gamma = 0.99
-    K_epochs = 4
-    eps_clip = 0.2
     random_seed = None
 
     if random_seed:
@@ -266,7 +240,6 @@ def main():
     ckpt = tf.train.Checkpoint(actor=ppo.actor, critic=ppo.critic)
     ckpt_manager = tf.train.CheckpointManager(ckpt, checkpoint_path, max_to_keep=5)
 
-    # 如果检查点存在，则恢复最新的检查点。
     if ckpt_manager.latest_checkpoint:
         ckpt.restore(ckpt_manager.latest_checkpoint)
         print('Latest checkpoint restored!!')
@@ -277,25 +250,17 @@ def main():
     for episode in range(1, n_episodes + 1):
         state = env.reset(is_show=False)
         state = state
-        #state = state.reshape(-1)
 
         for t in range(n_timesteps):
             timestep += 1
 
             action = ppo.act(state)
-            print('action:', action)
             next_state, reward, done = env.touch_in_step(action)
-            print("reward:", reward)
-
-
-
             ppo.remember(state, action, reward, next_state, done)
-            #state = next_state.reshape(-1)
             state = next_state
             print(f"update_timestep:{update_timestep}")
             print(f"timestep:{timestep}")
             if timestep % update_timestep == 0:
-                print('update')
                 ppo.replay()
                 timestep = 0
             if done:
